@@ -11,7 +11,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-24-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
-*Backend robusto para orquestrar conversas de chatbot, gerenciar estado de usuário e integrar com serviços de IA.*
+*Backend robusto para orquestrar conversas de chatbot, gerenciar estado de usuário e integrar com serviços de IA e de terceiros.*
 
 </div>
 
@@ -21,7 +21,7 @@
 
 - [Visão Geral](#-visão-geral)
 - [Stack Técnica](#️-stack-técnica)
-- [Instalação](#-instalação)
+- [Instalação e Conexão](#-instalação-e-conexão)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
 - [Arquitetura e Fluxo](#-arquitetura-e-fluxo)
 - [Scripts Disponíveis](#-scripts-disponíveis)
@@ -34,12 +34,13 @@
 
 O **GATTE_Bot** é um back-end projetado para servir como o cérebro de um sistema de atendimento via WhatsApp. Ele utiliza uma arquitetura modular em Node.js e Express para gerenciar fluxos de conversa, estado de usuário (via Redis) e persistência de dados (via PostgreSQL).
 
-O sistema é construído para ser escalável e desacoplado, permitindo a fácil adição de novos fluxos, integrações com diferentes APIs de Inteligência Artificial (OpenAI, Gemini) e a orquestração de tarefas complexas de forma assíncrona.
+O sistema é construído para ser escalável e desacoplado, permitindo a fácil adição de novos fluxos e integrações com diferentes APIs, como OpenAI (para IA generativa) e Microsoft Graph (para agendamento de reuniões).
 
 ### Funcionalidades Principais
 
 - 🤖 **Orquestração de Fluxos:** Gerencia a conversa com base no estado atual do usuário.
 - 🧠 **Múltiplas IAs:** Conecta-se a diferentes provedores de IA para processamento de linguagem natural.
+- 📅 **Agendamento Automático:** Integra-se com o **Microsoft Calendar** para verificar disponibilidade e agendar demonstrações.
 - 🗄️ **Persistência de Dados:** Salva o histórico de tickets e interações em um banco de dados PostgreSQL.
 - ⚡ **Gerenciamento de Estado:** Utiliza Redis para um acesso rápido e eficiente ao estado da sessão do usuário.
 - 🐳 **Ambiente Containerizado:** Roda em um ambiente Docker, garantindo consistência entre desenvolvimento e produção.
@@ -55,13 +56,14 @@ O sistema é construído para ser escalável e desacoplado, permitindo a fácil 
 | **Cache & Jobs** | Redis 7 | Gerenciamento de estado de sessão e filas de tarefas |
 | **Validação** | Zod | Validação de schemas e tipos em tempo de execução |
 | **IA & NLP** | OpenAI (GPT-4), Google (Gemini) | Processamento de linguagem e geração de respostas |
-| **Integração** | Meta (WhatsApp Business API) | Envio e recebimento de mensagens |
+| **Integração WhatsApp** | Evolution API | Envio e recebimento de mensagens via instância do WhatsApp Web |
+| **Integração Calendário**| Microsoft Graph API | Leitura de agenda e criação de eventos no Microsoft Calendar |
 | **Container** | Docker, Docker Compose | Orquestração e padronização do ambiente |
 | **Migrações de DB** | `node-pg-migrate` | Versionamento e gerenciamento do schema do banco |
 
 ---
 
-## ⚡ Instalação
+## ⚡ Instalação e Conexão
 
 ### Pré-requisitos
 
@@ -100,7 +102,15 @@ npm run db:migrate
 npm run dev
 ```
 
-O servidor estará disponível em `http://localhost:3000` (ou na porta definida em seu arquivo `.env`).
+O servidor estará disponível em `http://localhost:3000`.
+
+### Conectando com o WhatsApp (Evolution API)
+
+Para que o bot funcione, ele precisa estar conectado a uma instância da **Evolution API**.
+
+1.  **Acesse sua Instância:** Navegue até o painel da sua Evolution API.
+2.  **Leia o QR Code:** Use o aplicativo WhatsApp no seu celular para escanear o QR Code exibido no painel. Isso conectará o número de telefone à API.
+3.  **Configure o Webhook:** Na Evolution API, configure o webhook de mensagens para apontar para `http://<seu-servidor-gatte-bot>/webhook`.
 
 ---
 
@@ -118,14 +128,15 @@ gatte_bot/
 │   │   ├── pool.ts            # Pool de conexões com PostgreSQL
 │   │   └── repositories.ts    # Lógica de acesso aos dados (CRUD)
 │   ├── flows/
+│   │   ├── flow.abstract.ts   # Classe base para todos os fluxos
 │   │   └── flow-manager.ts    # Orquestrador de estado e fluxos de conversa
 │   ├── handlers/              # Handlers de rota do Express (controllers)
 │   ├── middleware/            # Middlewares (autenticação, logging, erros)
 │   ├── orchestrator.ts        # Orquestrador principal que conecta os serviços
 │   ├── services/
 │   │   ├── ai.service.ts      # Integração com as APIs de IA
-│   │   ├── jobs.service.ts    # Gerenciamento de tarefas em background com Redis
-│   │   └── whatsapp.service.ts# Comunicação com a API do WhatsApp
+│   │   ├── calendar.service.ts# Integração com o Microsoft Graph API
+│   │   └── whatsapp.service.ts# Comunicação com a Evolution API
 │   └── utils/
 │       ├── logger.ts          # Configuração do logger (Winston)
 │       └── security.ts        # Funções de hash, sanitização e validação
@@ -139,15 +150,16 @@ gatte_bot/
 
 ## 🔗 Arquitetura e Fluxo
 
-1.  **Webhook:** A API do WhatsApp envia uma mensagem para o endpoint `/webhook`.
+1.  **Webhook:** A **Evolution API** (conectada ao WhatsApp) envia uma mensagem para o endpoint `/webhook`.
 2.  **Middleware:** A requisição passa por middlewares de segurança e validação.
 3.  **Orquestrador:** O `orchestrator.ts` recebe a mensagem.
 4.  **Estado do Usuário:** O `flow-manager.ts` consulta o estado atual do usuário no Redis.
 5.  **Execução do Fluxo:** Com base no estado, o `flow-manager` decide qual ação tomar:
     - Chamar o `ai.service.ts` para interpretar a intenção do usuário.
+    - Chamar o `calendar.service.ts` para buscar horários ou agendar um evento.
     - Chamar o `repositories.ts` para buscar ou salvar informações no PostgreSQL.
     - Executar uma lógica de negócio específica do fluxo.
-6.  **Resposta:** O `whatsapp.service.ts` é acionado para enviar a resposta de volta ao usuário.
+6.  **Resposta:** O `whatsapp.service.ts` é acionado para enviar a resposta de volta ao usuário via Evolution API.
 
 ---
 
