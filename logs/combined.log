@@ -1,0 +1,3 @@
+2026-02-18T18:59:46.032Z [[32minfo[39m] Iniciando migration...
+2026-02-18T18:59:46.100Z [[31merror[39m] Erro na migration {"error":""}
+2026-02-18T20:04:35.977Z [[33mwarn[39m] Redis nao conectado (rate limit desabilitado) {"error":"Redis is already connecting/connected"}
