@@ -2,7 +2,7 @@ import cron from 'node-cron';
 
 import { query } from '@/db/pool';
 import { CtxRepo, ConvRepo } from '@/db/repositories';
-import { WhatsAppService } from '@/services/whatsapp.service';
+import { whatsappService } from '@/services/whatsapp.service';
 import { logger } from '@/utils/logger';
 
 // ══════════════════════════════════════════════════════════
@@ -49,7 +49,7 @@ export function startJobs() {
       for (const cert of expiring) {
         const dias = Math.ceil((new Date(cert.expires_at).getTime() - Date.now()) / 86_400_000);
         const msg = `⚠️ *Atencao!* Seu certificado digital *${cert.type}* vence em *${dias} dias* (${new Date(cert.expires_at).toLocaleDateString('pt-BR')}).\n\nPara renovar, entre em contato com nossa equipe. 📋`;
-        await WhatsAppService.sendText(cert.phone, msg);
+        await whatsappService.sendText(cert.phone, msg);
         await query('UPDATE certificates SET alert_30d_sent=true WHERE id=$1', [cert.id], 'job.cert_30d_update');
       }
 
@@ -76,7 +76,7 @@ export function startJobs() {
       for (const cert of expiring) {
         const dias = Math.ceil((new Date(cert.expires_at).getTime() - Date.now()) / 86_400_000);
         const msg = `🚨 *URGENTE!* Seu certificado *${cert.type}* vence em *${dias} dia(s)*!\n\nEvite interrupcoes na emissao de notas fiscais. Renove agora!\n\nDigite *4* para falar com nossa equipe. 🏃`;
-        await WhatsAppService.sendText(cert.phone, msg);
+        await whatsappService.sendText(cert.phone, msg);
         await query('UPDATE certificates SET alert_07d_sent=true WHERE id=$1', [cert.id], 'job.cert_7d_update');
       }
 

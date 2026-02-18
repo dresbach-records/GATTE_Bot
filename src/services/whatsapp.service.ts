@@ -1,88 +1,60 @@
-import axios from 'axios';
-import { config } from '@/config';
+import { Client, LocalAuth } from 'whatsapp-web.js';
+import qrcode from 'qrcode-terminal';
 import { logger } from '@/utils/logger';
 
-// ══════════════════════════════════════════════════════════
-// GATTE BOT — WhatsApp Service (Evolution API)
-// ══════════════════════════════════════════════════════════
+class WhatsAppService {
+  private client: Client;
+  private isReady = false;
 
-const api = axios.create({
-  baseURL: `${config.whatsapp.baseUrl}/message`,
-  headers: {
-    'apikey': config.whatsapp.apiKey,
-    'Content-Type': 'application/json',
-  },
-  timeout: 10_000,
-});
+  constructor() {
+    this.client = new Client({
+      authStrategy: new LocalAuth(),
+      puppeteer: {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      }
+    });
 
-export const WhatsAppService = {
+    this.initialize();
+  }
 
-  async sendText(phone: string, text: string): Promise<void> {
-    try {
-      await api.post(`/sendText/${config.whatsapp.instance}`, {
-        number: phone,
-        text,
-        delay: 1000,         // simula digitacao natural
-        linkPreview: false,
-      });
-    } catch (err: any) {
-      logger.error('Erro ao enviar mensagem WhatsApp', {
-        error: err.response?.data || err.message,
-      });
-      throw err;
+  private initialize() {
+    this.client.on('qr', (qr) => {
+      console.log('Escaneie o QR Code abaixo:');
+      qrcode.generate(qr, { small: true });
+    });
+
+    this.client.on('ready', () => {
+      this.isReady = true;
+      logger.info('WhatsApp conectado com sucesso.');
+    });
+
+    this.client.on('auth_failure', (msg) => {
+      logger.error('Falha na autenticação', { msg });
+    });
+
+    this.client.on('disconnected', () => {
+      this.isReady = false;
+      logger.warn('WhatsApp desconectado');
+    });
+
+    this.client.initialize();
+  }
+
+  public async sendText(to: string, message: string) {
+    if (!this.isReady) {
+      logger.error('WhatsApp client não está pronto. Mensagem não enviada.');
+      return;
     }
-  },
-
-  async sendButtons(phone: string, text: string, buttons: Array<{ id: string; text: string }>): Promise<void> {
     try {
-      await api.post(`/sendButtons/${config.whatsapp.instance}`, {
-        number: phone,
-        text,
-        buttons: buttons.map(b => ({ buttonId: b.id, buttonText: { displayText: b.text }, type: 1 })),
-        footerText: 'GATTE Tecnologia',
-      });
-    } catch (err: any) {
-      // fallback para texto simples se botoes nao suportados
-      const fallback = `${text}\n\n${buttons.map((b, i) => `${i+1}. ${b.text}`).join('\n')}`;
-      await WhatsAppService.sendText(phone, fallback);
+      // O whatsapp-web.js espera o formato [number]@c.us
+      const chatId = `${to}@c.us`;
+      await this.client.sendMessage(chatId, message);
+    } catch (error) {
+      logger.error('Erro ao enviar mensagem via whatsapp-web.js', { error });
     }
-  },
+  }
+}
 
-  async sendList(phone: string, text: string, sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>): Promise<void> {
-    try {
-      await api.post(`/sendList/${config.whatsapp.instance}`, {
-        number: phone,
-        title: 'GATTE Tecnologia',
-        description: text,
-        buttonText: 'Ver opcoes',
-        footerText: 'Selecione uma opcao',
-        sections,
-      });
-    } catch (err: any) {
-      // fallback para texto
-      const lines: string[] = [text, ''];
-      sections.forEach(s => {
-        lines.push(`*${s.title}*`);
-        s.rows.forEach((r, i) => lines.push(`${i+1}. ${r.title}`));
-      });
-      await WhatsAppService.sendText(phone, lines.join('\n'));
-    }
-  },
-
-  async markRead(messageId: string): Promise<void> {
-    try {
-      await api.post(`/markMessageAsRead/${config.whatsapp.instance}`, {
-        readMessages: [{ id: messageId }],
-      });
-    } catch { /* nao critico */ }
-  },
-
-  async sendTyping(phone: string, durationMs = 1500): Promise<void> {
-    try {
-      await api.post(`/sendPresence/${config.whatsapp.instance}`, {
-        number: phone,
-        options: { presence: 'composing', delay: durationMs },
-      });
-    } catch { /* nao critico */ }
-  },
-};
+// Exporta uma única instância para ser usada em toda a aplicação
+export const whatsappService = new WhatsAppService();

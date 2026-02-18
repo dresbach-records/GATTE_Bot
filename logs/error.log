@@ -1,3 +1,5 @@
 2026-02-18T18:59:46.100Z [[31merror[39m] Erro na migration {"error":""}
 2026-02-18T20:04:35.993Z [[31merror[39m] Falha ao conectar ao PostgreSQL {"error":"connect ECONNREFUSED 127.0.0.1:5432"}
 2026-02-18T20:34:02.522Z [[31merror[39m] Erro na migration {"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+2026-02-18T20:56:55.815Z [[31merror[39m] Falha ao conectar ao PostgreSQL {"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+2026-02-18T20:57:20.246Z [[31merror[39m] Falha ao conectar ao PostgreSQL {"error":"connect ECONNREFUSED 127.0.0.1:5432"}

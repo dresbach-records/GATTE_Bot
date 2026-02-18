@@ -1,12 +1,10 @@
 import express from 'express';
 import { config } from '@/config';
-import { orchestrate } from '@/orchestrator';
-import { WhatsAppService } from '@/services/whatsapp.service';
+import '@/services/whatsapp.service'; // Importa para inicializar o serviço
 import { startJobs } from '@/services/jobs.service';
-import { rateLimiter, webhookValidator, errorHandler, requestLogger } from '@/middleware';
+import { errorHandler, requestLogger } from '@/middleware';
 import { logger } from '@/utils/logger';
 import { pool } from '@/db/pool';
-import { WhatsAppMessage } from '@/types';
 
 // ══════════════════════════════════════════════════════════
 // GATTE BOT — Server Principal
@@ -27,62 +25,6 @@ app.get('/health', async (_req, res) => {
     res.status(503).json({ status: 'db_error' });
   }
 });
-
-// ─── Webhook WhatsApp (Evolution API) ─────────────────────
-app.post(
-  '/webhook',
-  webhookValidator,
-  rateLimiter,
-  async (req, res) => {
-    // Responder 200 imediatamente (Evolution API exige resposta rapida)
-    res.json({ ok: true });
-
-    try {
-      const event = req.body;
-
-      // Evolution API: event.event === 'messages.upsert' para novas msgs
-      if (event?.event !== 'messages.upsert') return;
-
-      const data = event.data;
-
-      // Ignorar mensagens proprias (enviadas pelo bot)
-      if (data?.key?.fromMe) return;
-
-      // Ignorar grupos
-      const jid: string = data?.key?.remoteJid || '';
-      if (jid.includes('@g.us')) return;
-
-      // Ignorar mensagens sem texto
-      const text = data?.message?.conversation
-        || data?.message?.extendedTextMessage?.text
-        || '';
-      if (!text.trim()) return;
-
-      const phone = jid.split('@')[0];
-
-      const incoming: WhatsAppMessage = {
-        from:      phone,
-        body:      text,
-        messageId: data?.key?.id || '',
-        timestamp: data?.messageTimestamp || Date.now(),
-        type:      'text',
-      };
-
-      // Marcar como lida
-      if (incoming.messageId) {
-        WhatsAppService.markRead(incoming.messageId).catch(() => {});
-      }
-
-      // Processar de forma assincrona (nao bloqueia o webhook)
-      orchestrate(incoming).catch(err => {
-        logger.error('Erro no orchestrator', { error: err.message });
-      });
-
-    } catch (err: any) {
-      logger.error('Erro no webhook', { error: err.message });
-    }
-  }
-);
 
 // ─── Endpoint LGPD: solicitar exclusao de dados ───────────
 app.post('/privacy/delete', async (req, res) => {
@@ -127,7 +69,6 @@ async function main() {
   // Iniciar servidor
   app.listen(config.port, () => {
     logger.info(`GATTE Bot rodando na porta ${config.port} [${config.nodeEnv}]`);
-    logger.info(`Webhook: POST http://localhost:${config.port}/webhook`);
     logger.info(`Health:  GET  http://localhost:${config.port}/health`);
   });
 }
